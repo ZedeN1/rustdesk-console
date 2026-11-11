@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -45,6 +46,8 @@ import {
  * Manages the permission relationships between device groups and users
  */
 export class DeviceGroupService {
+  private readonly logger = new Logger(DeviceGroupService.name);
+
   constructor(
     @InjectRepository(DeviceGroup)
     private deviceGroupRepository: Repository<DeviceGroup>,
@@ -330,6 +333,9 @@ export class DeviceGroupService {
     deviceGroup.note = note || '';
 
     await this.deviceGroupRepository.save(deviceGroup);
+    this.logger.log(
+      `Device group created: ${deviceGroup.guid} by user ${actorGuid}`,
+    );
 
     return { message: 'Device group created successfully' };
   }
@@ -373,6 +379,7 @@ export class DeviceGroupService {
     }
 
     await this.deviceGroupRepository.save(deviceGroup);
+    this.logger.log(`Device group updated: ${guid} by user ${actorGuid}`);
 
     return { message: 'Device group updated successfully' };
   }
@@ -409,6 +416,9 @@ export class DeviceGroupService {
 
       await deviceGroupRepository.remove(deviceGroup);
     });
+    this.logger.log(
+      `Device group deleted: ${guid} by user ${actorGuid} (${affectedUuids.length} devices ungrouped)`,
+    );
     for (const uuid of affectedUuids) {
       this.strategyService.invalidateDeviceStrategyCache(uuid);
     }
@@ -449,6 +459,9 @@ export class DeviceGroupService {
       );
       this.strategyService.invalidateDeviceStrategyCache(peer.uuid);
     }
+    this.logger.log(
+      `${peers.length} device(s) added to group ${guid} by user ${actorGuid}`,
+    );
 
     return { message: 'Devices added successfully' };
   }
@@ -490,6 +503,9 @@ export class DeviceGroupService {
       );
       this.strategyService.invalidateDeviceStrategyCache(peer.uuid);
     }
+    this.logger.log(
+      `${peers.length} device(s) removed from group ${guid} by user ${actorGuid}`,
+    );
 
     return { message: 'Devices removed successfully' };
   }
@@ -847,6 +863,7 @@ export class DeviceGroupService {
         );
       }
       this.strategyService.invalidateDeviceStrategyCache(guid);
+      this.logger.log(`Device updated: ${guid} by user ${actorGuid}`);
     }
   }
 
@@ -940,6 +957,17 @@ export class DeviceGroupService {
             : { remove: deviceIds },
         );
       }
+    }
+
+    if (succeeded.length > 0) {
+      this.logger.log(
+        `${succeeded.length} device(s) ${status === DeviceStatus.ENABLED ? 'enabled' : 'disabled'} by user ${actorGuid}`,
+      );
+    }
+    if (protocolEnforcement && !protocolEnforcement.enforced) {
+      this.logger.warn(
+        `Device status changed in the database but not enforced on hbbs (${protocolEnforcement.reason ?? 'unknown'})`,
+      );
     }
 
     return {
@@ -1061,6 +1089,10 @@ export class DeviceGroupService {
       }
       throw error;
     }
+
+    this.logger.log(
+      `Device deleted: ${guid} (id ${deviceId ?? '-'}) by user ${actorGuid}`,
+    );
 
     let protocolEnforcement: DeviceBanSyncResult | undefined;
     if (options.protocolBan !== false && deviceId) {

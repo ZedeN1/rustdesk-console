@@ -7,6 +7,12 @@ import { AddPasswordResetTokens1790985600002 } from '../migrations/1790985600002
 import { AddDeviceTombstones1791040000000 } from '../migrations/1791040000000-AddDeviceTombstones';
 import { AddDeviceTombstoneReleaseTracking1791126400000 } from '../migrations/1791126400000-AddDeviceTombstoneReleaseTracking';
 
+import {
+  resolveDbLogMode,
+  resolveSlowQueryMs,
+  TypeOrmNestLogger,
+} from './typeorm-logger';
+
 export function createDataSourceOptions(): DataSourceOptions {
   const common = {
     entities: DATABASE_ENTITIES,
@@ -19,7 +25,10 @@ export function createDataSourceOptions(): DataSourceOptions {
     ],
     migrationsRun: false,
     synchronize: false,
-    logging: false,
+    // TypeOrmNestLogger does its own filtering based on DB_LOG.
+    logging: true,
+    logger: new TypeOrmNestLogger(resolveDbLogMode(process.env.DB_LOG)),
+    maxQueryExecutionTime: resolveSlowQueryMs(process.env.DB_SLOW_QUERY_MS),
   };
 
   if (getDbType() === 'mysql') {

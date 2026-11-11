@@ -6,12 +6,28 @@ import cookieParser from 'cookie-parser';
 import type { Request, Response, NextFunction } from 'express';
 import { businessWritesAllowed } from './updater/maintenance';
 import { rbacRequestScopeMiddleware } from './modules/rbac/rbac-request-scope.middleware';
+import { createAppLogger } from './common/logging/create-app-logger';
+import { resolveLogLevels } from './common/logging/log-level.util';
+import { requestLoggingMiddleware } from './common/logging/request-logging.middleware';
 
 export async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: createAppLogger(),
+  });
+
+  const minimumLevel = resolveLogLevels(process.env.LOG_LEVEL)[0];
+  logger.log(
+    minimumLevel === 'verbose' || minimumLevel === 'debug'
+      ? `Log level: ${minimumLevel}`
+      : `Log level: ${minimumLevel} (set LOG_LEVEL=debug for diagnostic output)`,
+  );
 
   app.enableShutdownHooks();
+
+  // Log every finished request, including responses produced by the
+  // middleware below (such as the maintenance 503).
+  app.use(requestLoggingMiddleware);
 
   // Bind the request-scoped RBAC cache before anything else so guards,
   // interceptors and handlers all share one authorization snapshot.
